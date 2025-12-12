@@ -172,13 +172,14 @@ tab1, tab2, tab3 = st.tabs(["Statistical Arbitrage", "Volatility Trading", "Mark
 # -------------------------
 with tab1:
     st.header("Statistical Arbitrage Engine")
-    col1 = st.columns(1)
-    with col1:
-        oddsA = st.text_input("Moneyline Team A (American, e.g. -150 or +130)", value="-110")
-        oddsB = st.text_input("Moneyline Team B (American, e.g. +140)", value="+110")
-        posted_spread = st.number_input("Posted Spread (Team A perspective, e.g. -3.5 means A favored by 3.5)", value=-3.5, format="%.2f")
+    col1, col2 = st.columns(2) 
+    with col1: 
+        oddsA = st.text_input("Moneyline Team A (American, e.g. -150 or +130)", value="-110") 
+        oddsB = st.text_input("Moneyline Team B (American, e.g. +140)", value="+110") 
+        posted_spread = st.number_input("Posted Spread (Team A perspective, e.g. -3.5 means A favored by 3.5)", value=-3.5, format="%.2f") 
         threshold = st.number_input("Mispricing Threshold (points)", min_value=0.1, value=1.0, step=0.1)
-
+    with col2: 
+        st.write("")
     if st.button("Run Stat Arb"):
         res = stat_arb_signal(posted_spread=posted_spread, oddsA=oddsA, oddsB=oddsB, threshold=threshold, bankroll=bankroll, kelly_frac=kelly_frac)
         st.json(res)
