@@ -244,35 +244,35 @@ st.markdown("""
 st.markdown("---")
 st.markdown("**How to Use HedgeBet IQ**")
 st.markdown("""
-### 1. Mean Reversion Engine
-- Enter the current decimal odds for the selection.
-- Enter the historical mean of those odds and the standard deviation (volatility).
-- Click **Calculate Fair Odds**.
-- Interpretation:
-  - **Z-score > 1** → Odds overvalued, potential bet opportunity.
-  - **Z-score < -1** → Odds undervalued, consider avoiding or hedging.
-  - **Z-score near 0** → Market appears efficient, no strong edge.
+### 1. Statistical Arbitrage
+- Enter moneyline odds for Team A and Team B (American format, e.g., -150 or +130).
+- Enter the posted spread from the sportsbook (Team A perspective).
+- Set a mispricing threshold (points) to filter small deviations.
+- Click **Run Stat Arb** to see:
+  - Fair spread implied by odds.
+  - Mispricing.
+  - Bet recommendation and suggested stake based on Kelly fraction.
 
-### 2. Spread Divergence Engine
-- Enter predicted spreads from two independent models and the sportsbook spread.
-- Click **Analyze Divergence**.
-- Interpretation:
-  - **Divergence < -1** → Favorite undervalued, consider betting the favorite.
-  - **Divergence > 1** → Underdog undervalued, consider betting the underdog.
-  - **Divergence near 0** → No strong divergence detected.
+### 2. Volatility Trading
+- Input pregame total, current live total, combined score, and time remaining.
+- Enter pace and historical points per minute for expected scoring.
+- Input odds for Over/Under and threshold percent for signal detection.
+- Click **Run Volatility Model** to see:
+  - Calculated market vs true scoring pace.
+  - Edge estimate.
+  - Suggested bet and stake.
 
-### 3. Kelly Bet Sizing
-- Enter your total bankroll, estimated win probability, and decimal odds.
-- Click **Calculate Kelly**.
-- Interpretation:
-  - Displays **Kelly fraction** and recommended stake in units.
-  - Fractional Kelly reduces risk of large drawdowns.
+### 3. Market Making Scalp
+- Enter Book A and Book B lines (total or spread).
+- Optionally enter model mean and SD for expected total.
+- Click **Check Middle** to see:
+  - Probability the actual total falls in the middle.
+  - Expected value after juice buffer.
+  - Trade signal: **MIDDLE_SCALP** or **AVOID_MIDDLE**.
 
-### 4. Research Journey
-- Provides a detailed explanation of the financial strategies, mathematical derivations, and algorithmic implementation used in HedgeBet IQ.
-
-**General Guidelines**
-- Always cross-check model recommendations with live sportsbook lines.
-- Backtest strategies on historical data before real-money use.
-- Adjust mispricing thresholds and Kelly fractions to match personal risk tolerance.
+**General Tips**
+- These models produce probabilistic outputs; use responsibly.
+- Always cross-check with live sportsbook lines.
+- Backtest before committing real money.
+- Adjust bankroll and Kelly fraction according to your risk tolerance.
 """)
