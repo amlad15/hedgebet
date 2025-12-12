@@ -218,8 +218,8 @@ with tab3:
         user_mean = st.number_input("Model mean for total (optional) - leave 0 to auto", value=0.0, format="%.2f")
         user_sd = st.number_input("Model sd for total (optional) - leave 0 to use default", value=0.0, format="%.2f")
     with col2:
-        st.write("This engine detects middle opportunities when Book A and Book B show different lines.")
-        st.write("It computes the simplistic probability the actual total falls in the middle and shows expected value after a juice buffer.")
+        st.write("")
+        
 
     if st.button("Check Middle"):
         mean_val = None if user_mean == 0 else user_mean
