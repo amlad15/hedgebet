@@ -241,3 +241,38 @@ st.markdown("""
 - Sportsbook limits, juice, and account restrictions can reduce or eliminate theoretical edges.
 - This app is for educational and research purposes only. Comply with local laws and sportsbook terms of service.
 """)
+st.markdown("---")
+st.markdown("**How to Use HedgeBet IQ**")
+st.markdown("""
+### 1. Mean Reversion Engine
+- Enter the current decimal odds for the selection.
+- Enter the historical mean of those odds and the standard deviation (volatility).
+- Click **Calculate Fair Odds**.
+- Interpretation:
+  - **Z-score > 1** → Odds overvalued, potential bet opportunity.
+  - **Z-score < -1** → Odds undervalued, consider avoiding or hedging.
+  - **Z-score near 0** → Market appears efficient, no strong edge.
+
+### 2. Spread Divergence Engine
+- Enter predicted spreads from two independent models and the sportsbook spread.
+- Click **Analyze Divergence**.
+- Interpretation:
+  - **Divergence < -1** → Favorite undervalued, consider betting the favorite.
+  - **Divergence > 1** → Underdog undervalued, consider betting the underdog.
+  - **Divergence near 0** → No strong divergence detected.
+
+### 3. Kelly Bet Sizing
+- Enter your total bankroll, estimated win probability, and decimal odds.
+- Click **Calculate Kelly**.
+- Interpretation:
+  - Displays **Kelly fraction** and recommended stake in units.
+  - Fractional Kelly reduces risk of large drawdowns.
+
+### 4. Research Journey
+- Provides a detailed explanation of the financial strategies, mathematical derivations, and algorithmic implementation used in HedgeBet IQ.
+
+**General Guidelines**
+- Always cross-check model recommendations with live sportsbook lines.
+- Backtest strategies on historical data before real-money use.
+- Adjust mispricing thresholds and Kelly fractions to match personal risk tolerance.
+""")
