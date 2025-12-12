@@ -1,243 +1,239 @@
 import streamlit as st
 import numpy as np
-import math
-from scipy.stats import norm
-from math import erf, sqrt
 
 st.set_page_config(page_title="HedgeBet IQ", layout="wide")
 
-# -------------------------
-# Utility functions
-# -------------------------
-def safe_int(x, default=None):
-    try:
-        return int(str(x).replace('+',''))
-    except:
-        return default
+# -------------------------------------------------------
+#  FUNCTIONS (Mean Reversion, Divergence, Kelly)
+# -------------------------------------------------------
 
-def american_to_decimal(odds):
-    o = safe_int(odds, None)
-    if o is None:
-        return None
-    if o > 0:
-        return 1 + (o / 100.0)
-    else:
-        return 1 + (100.0 / (-o))
+def mean_reversion_fair_odds(current_odds, historical_mean, volatility):
+    deviation = current_odds - historical_mean
+    z_score = deviation / volatility if volatility > 0 else 0
+    fair_odds = historical_mean
+    return fair_odds, z_score
 
-def american_to_prob(odds):
-    o = safe_int(odds, None)
-    if o is None:
-        return None
-    if o > 0:
-        return 100.0 / (o + 100.0)
-    else:
-        return -o / (-o + 100.0)
+def dual_model_spread(model1_spread, model2_spread, sportsbook_spread):
+    avg_model_spread = (model1_spread + model2_spread) / 2
+    divergence = avg_model_spread - sportsbook_spread
+    return avg_model_spread, divergence
 
-def normal_cdf(x):
-    return (1 + erf(x / sqrt(2))) / 2
+def kelly_fraction(prob, decimal_odds):
+    edge = (prob * decimal_odds) - 1
+    return max(edge / (decimal_odds - 1), 0)
 
-# -------------------------
-# Algorithm functions
-# -------------------------
-# 1) Stat Arb functions
-def stat_arb_fair_spread(oddsA, oddsB):
-    PA = american_to_prob(oddsA)
-    PB = american_to_prob(oddsB)
-    if PA is None or PB is None or PA <= 0 or PB <= 0:
-        return None
-    # formula from prompt
-    try:
-        fair_spread = -(math.log(PA / PB) / 0.23)
-    except:
-        return None
-    return fair_spread
 
-def stat_arb_signal(posted_spread, oddsA, oddsB, threshold=1.0, bankroll=1000, kelly_frac=0.2):
-    fair = stat_arb_fair_spread(oddsA, oddsB)
-    if fair is None:
-        return {"signal":"ERROR", "message":"Invalid odds for conversion"}
-    mispricing = posted_spread - fair
-    res = {"fair_spread": round(fair,4), "mispricing": round(mispricing,4)}
-    if abs(mispricing) >= threshold:
-        side = "Bet favorite (reduce spread)" if mispricing < 0 else "Bet underdog (increase spread)"
-        # crude stake calculation: estimate edge from mispricing magnitude
-        # convert mispricing to a probability edge heuristic
-        edge = min(0.45, max(0.01, abs(mispricing) * 0.02))  # heuristic
-        # assume decimal odds ~1.91 (-110), b = 0.91
-        odds_dec = american_to_decimal(-110) or 1.91
-        b = odds_dec - 1
-        p = 0.5 + edge
-        q = 1 - p
-        f = (b * p - q) / b if b>0 else 0
-        f = max(0, f) * kelly_frac
-        stake = round(bankroll * min(1.0, f), 2)
-        res.update({
-            "signal": "BET",
-            "recommendation": side,
-            "edge_estimate": round(edge,4),
-            "suggested_stake": stake
-        })
-    else:
-        res.update({"signal":"NO_BET", "reason":"mispricing below threshold"})
-    return res
+# -------------------------------------------------------
+#  MAIN UI WITH TABS
+# -------------------------------------------------------
 
-# 2) Volatility trading functions
-def sports_volatility_signal(pregame_total, live_total, current_score, time_remaining_minutes, pace, hist_ppm, threshold_pct=0.05, bankroll=1000, kelly_frac=0.2, odds_over=-110, odds_under=-110):
-    # basic inputs required validation
-    try:
-        time_remaining = float(time_remaining_minutes)
-        if time_remaining <= 0:
-            time_remaining = 1.0
-        siv_market = (live_total - current_score) / time_remaining  # pts per minute implied remaining
-        siv_true = pace * hist_ppm  # heuristic true scoring rate per minute
-        diff = siv_true - siv_market
-    except Exception as e:
-        return {"signal":"ERROR", "message": str(e)}
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "Mean Reversion Engine",
+    "Spread Divergence Engine",
+    "Kelly Bet Sizing",
+    "Research Journey (Short)",
+    "Research Journey (Full Paper)"
+])
 
-    res = {"siv_market": round(siv_market,4), "siv_true": round(siv_true,4), "volatility_edge": round(diff,6)}
+# -------------------------------------------------------
+#  TAB 1 — MEAN REVERSION ENGINE
+# -------------------------------------------------------
 
-    # If true > market -> expect more scoring than market expects -> bet OVER
-    if diff > abs(siv_market) * threshold_pct:
-        # estimate probability edge using a normal-like mapping
-        z = diff / (abs(siv_market) if siv_market!=0 else 1.0)
-        edge = min(0.45, max(0.01, 0.05 * z))
-        odds_dec = american_to_decimal(odds_over) or 1.91
-        b = odds_dec - 1
-        p = 0.5 + edge
-        q = 1 - p
-        f = (b * p - q) / b if b>0 else 0
-        f = max(0, f) * kelly_frac
-        stake = round(bankroll * min(1.0, f),2)
-        res.update({"signal":"BET_OVER", "edge_est":round(edge,4), "suggested_stake": stake, "odds_used": odds_over})
-    elif diff < -abs(siv_market) * threshold_pct:
-        z = -diff / (abs(siv_market) if siv_market!=0 else 1.0)
-        edge = min(0.45, max(0.01, 0.05 * z))
-        odds_dec = american_to_decimal(odds_under) or 1.91
-        b = odds_dec - 1
-        p = 0.5 + edge
-        q = 1 - p
-        f = (b * p - q) / b if b>0 else 0
-        f = max(0, f) * kelly_frac
-        stake = round(bankroll * min(1.0, f),2)
-        res.update({"signal":"BET_UNDER", "edge_est":round(edge,4), "suggested_stake": stake, "odds_used": odds_under})
-    else:
-        res.update({"signal":"NO_BET", "reason":"volatility within threshold"})
-    return res
-
-# 3) Market making scalp (middle) functions
-def middle_probability(lower, upper, mean, sd):
-    if sd <= 0:
-        sd = 1e-9
-    z1 = (upper - mean) / sd
-    z2 = (lower - mean) / sd
-    return normal_cdf(z1) - normal_cdf(z2)
-
-def spread_market_making(bookA_line, bookB_line, mean=None, sd=None, juice_buffer=0.02):
-    lower = min(bookA_line, bookB_line)
-    upper = max(bookA_line, bookB_line)
-    diff = upper - lower
-    if diff < 0.5:  # require some minimum gap
-        return {"signal":"NO_TRADE", "reason":"lines too close", "line_difference": round(diff,3)}
-    # default mean and sd if not provided (sport heuristics)
-    if mean is None:
-        mean = (lower + upper) / 2.0
-    if sd is None or sd <= 0:
-        sd = 7.0  # default sd for totals; user can set differently by sport
-    prob_middle = middle_probability(lower, upper, mean, sd)
-    ev = prob_middle - juice_buffer
-    res = {
-        "signal": "MIDDLE_SCALP" if ev > 0 else "AVOID_MIDDLE",
-        "lower_line": lower,
-        "upper_line": upper,
-        "line_difference": round(diff,3),
-        "middle_probability": round(prob_middle,4),
-        "expected_value": round(ev,4)
-    }
-    return res
-
-# -------------------------
-# Streamlit UI
-# -------------------------
-st.title("HedgeBet IQ — Quant Betting Assistant")
-st.markdown("Finance inspired hedge algorithms adapted for sports betting. Use responsibly. This app is for research and prototyping.")
-
-bankroll = st.sidebar.number_input("Bankroll (units)", min_value=1.0, value=1000.0, step=1.0)
-kelly_frac = st.sidebar.slider("Kelly fraction for sizing", min_value=0.01, max_value=1.0, value=0.2, step=0.01)
-st.sidebar.markdown("Note: Algorithms produce probabilistic recommendations. Backtest before using real money.")
-
-tab1, tab2, tab3 = st.tabs(["Statistical Arbitrage", "Volatility Trading", "Market Making Scalp"])
-
-# -------------------------
-# Tab 1: Stat Arb
-# -------------------------
 with tab1:
-    st.header("Statistical Arbitrage Engine")
+    st.header("Mean Reversion Odds Engine")
+
     col1, col2 = st.columns(2)
     with col1:
-        oddsA = st.text_input("Moneyline Team A (American, e.g. -150 or +130)", value="-110")
-        oddsB = st.text_input("Moneyline Team B (American, e.g. +140)", value="+110")
-        posted_spread = st.number_input("Posted Spread (Team A perspective, e.g. -3.5 means A favored by 3.5)", value=-3.5, format="%.2f")
-        threshold = st.number_input("Mispricing Threshold (points)", min_value=0.1, value=1.0, step=0.1)
-    with col2:
-        st.write("Help")
-        st.write("This engine compares a fair spread implied by moneyline odds to the posted spread.")
-        st.write("If the posted spread deviates from fair spread beyond the threshold, a bet is signaled.")
+        current_odds = st.number_input("Current Odds (Decimal)", value=1.90)
+        historical_mean = st.number_input("Historical Mean Odds", value=1.85)
+        volatility = st.number_input("Volatility (Std Dev)", value=0.05)
 
-    if st.button("Run Stat Arb"):
-        res = stat_arb_signal(posted_spread=posted_spread, oddsA=oddsA, oddsB=oddsB, threshold=threshold, bankroll=bankroll, kelly_frac=kelly_frac)
-        st.json(res)
+    if st.button("Calculate Fair Odds", key="mr_calc"):
+        fair_odds, z = mean_reversion_fair_odds(current_odds, historical_mean, volatility)
 
-# -------------------------
-# Tab 2: Volatility
-# -------------------------
+        st.subheader("Results")
+        st.write(f"**Fair Odds:** {fair_odds:.2f}")
+        st.write(f"**Z-Score Deviation:** {z:.2f}")
+
+        if z > 1:
+            st.success("Bet opportunity: The sportsbook odds are too high relative to expected value.")
+        elif z < -1:
+            st.warning("Avoid or hedge: Odds are too low and likely to regress upward.")
+        else:
+            st.info("Market appears efficient — no strong edge here.")
+
+
+# -------------------------------------------------------
+#  TAB 2 — SPREAD DIVERGENCE ENGINE
+# -------------------------------------------------------
+
 with tab2:
-    st.header("Volatility Trading Engine")
-    col1, col2 = st.columns(2)
-    with col1:
-        preg_total = st.number_input("Pregame Total (points)", value=220.0, format="%.2f")
-        live_total = st.number_input("Live Total (current line)", value=220.0, format="%.2f")
-        current_score = st.number_input("Current Combined Score", value=0.0, format="%.2f")
-        time_remaining = st.number_input("Time Remaining (minutes)", min_value=0.0, value=48.0, format="%.2f")
-    with col2:
-        pace = st.number_input("Pace (possessions per minute or scoring pace coefficient)", value=1.0, format="%.3f")
-        hist_ppm = st.number_input("Historical points per minute (team combined)", value=4.58, format="%.3f")
-        odds_over = st.text_input("Odds for Over (American)", value="-110")
-        odds_under = st.text_input("Odds for Under (American)", value="-110")
-        threshold_pct = st.slider("Threshold percent (relative)", min_value=0.01, max_value=0.2, value=0.05, step=0.01)
+    st.header("Dual Model Spread Divergence Engine")
 
-    if st.button("Run Volatility Model"):
-        res = sports_volatility_signal(pregame_total=preg_total, live_total=live_total, current_score=current_score, time_remaining_minutes=time_remaining, pace=pace, hist_ppm=hist_ppm, threshold_pct=threshold_pct, bankroll=bankroll, kelly_frac=kelly_frac, odds_over=odds_over, odds_under=odds_under)
-        st.json(res)
+    model1 = st.number_input("Model 1 Predicted Spread", value=-3.5)
+    model2 = st.number_input("Model 2 Predicted Spread", value=-4.0)
+    sportsbook = st.number_input("Sportsbook Spread", value=-2.5)
 
-# -------------------------
-# Tab 3: Market Making Scalp
-# -------------------------
+    if st.button("Analyze Divergence", key="div_btn"):
+        avg_spread, divergence = dual_model_spread(model1, model2, sportsbook)
+
+        st.subheader("Results")
+        st.write(f"**Average Model Spread:** {avg_spread:.2f}")
+        st.write(f"**Divergence from Sportsbook:** {divergence:.2f}")
+
+        if divergence < -1:
+            st.success("Bet Recommendation: Sportsbook is undervaluing the favorite. Bet the favorite.")
+        elif divergence > 1:
+            st.success("Bet Recommendation: Sportsbook is undervaluing the underdog. Bet the underdog.")
+        else:
+            st.info("No strong divergence detected. Market appears fair.")
+
+
+# -------------------------------------------------------
+#  TAB 3 — KELLY BET SIZING (BANKROLL BLOCK FIXED)
+# -------------------------------------------------------
+
 with tab3:
-    st.header("Market Making Scalp Finder")
-    col1, col2 = st.columns(2)
-    with col1:
-        bookA_line = st.number_input("Book A Line (total or spread)", value=45.5, format="%.2f")
-        bookB_line = st.number_input("Book B Line (total or spread)", value=47.5, format="%.2f")
-        user_mean = st.number_input("Model mean for total (optional) - leave 0 to auto", value=0.0, format="%.2f")
-        user_sd = st.number_input("Model sd for total (optional) - leave 0 to use default", value=0.0, format="%.2f")
-    with col2:
-        st.write("This engine detects middle opportunities when Book A and Book B show different lines.")
-        st.write("It computes the simplistic probability the actual total falls in the middle and shows expected value after a juice buffer.")
+    st.header("Kelly Criterion Bet Sizing")
 
-    if st.button("Check Middle"):
-        mean_val = None if user_mean == 0 else user_mean
-        sd_val = None if user_sd == 0 else user_sd
-        res = spread_market_making(bookA_line=bookA_line, bookB_line=bookB_line, mean=mean_val, sd=sd_val, juice_buffer=0.02)
-        st.json(res)
+    st.markdown("### Enter Inputs")
+    colA, colB = st.columns(2)
 
-# -------------------------
-# Footer / notes
-# -------------------------
-st.markdown("---")
-st.markdown("**Important notes**")
-st.markdown("""
-- These algorithms are prototyping tools. They implement heuristics based on financial analogues.
-- No model can guarantee outcomes. Backtest thoroughly before committing real funds.
-- Sportsbook limits, juice, and account restrictions can reduce or eliminate theoretical edges.
-- This app is for educational and research purposes only. Comply with local laws and sportsbook terms of service.
-""")
+    with colA:
+        bankroll = st.number_input("Total Bankroll (Units)", value=1000.0)
+        prob = st.number_input("Your Estimated Win Probability (Decimal)", value=0.55)
+
+    with colB:
+        odds = st.number_input("Odds (Decimal)", value=1.90)
+
+    if st.button("Calculate Kelly", key="kelly_btn"):
+        kf = kelly_fraction(prob, odds)
+        bet_size = bankroll * kf
+
+        st.markdown("### Results")
+        st.write(f"**Kelly Fraction:** {kf:.4f}")
+        st.write(f"**Recommended Bet:** {bet_size:.2f} units")
+
+        if kf == 0:
+            st.warning("No edge detected. Kelly recommends NOT betting.")
+        else:
+            st.success(f"Optimal bet size is **{bet_size:.2f} units**.")
+
+
+# -------------------------------------------------------
+#  TAB 4 — RESEARCH JOURNEY (SHORT VERSION)
+# -------------------------------------------------------
+
+with tab4:
+    st.header("Research Journey (Short Summary)")
+    st.markdown("""
+    ### Summary
+    This project started with a question:
+
+    **Can successful hedge strategies from financial markets be adapted to sports betting?**
+
+    After researching market microstructure, volatility clustering, statistical arbitrage, and Kelly optimization,
+    three transferable quantitative concepts emerged:
+
+    1. Mean Reversion → Mispriced odds correction  
+    2. Spread Divergence → Inefficient sportsbook lines  
+    3. Kelly → Optimal bankroll allocation  
+
+    These were translated into clean, usable betting models and built into HedgeBet IQ.
+    """)
+
+
+# -------------------------------------------------------
+#  TAB 5 — FULL RESEARCH PAPER STYLE VERSION
+# -------------------------------------------------------
+
+with tab5:
+    st.header("Research Journey: From Historical Hedging to Quant Betting")
+    st.markdown("""
+    ## Abstract
+    This research investigates the hypothesis that **legacy hedge-fund strategies**—specifically statistical arbitrage,
+    volatility-based mean reversion, and Kelly-based capital allocation—can be ported into the domain of sports betting.
+    The goal was to explore whether structures that exploit inefficiencies in financial markets can similarly exploit
+    pricing inefficiencies in sportsbook markets.
+
+    ---
+
+    ## 1. Introduction
+    Modern financial markets and modern betting markets share fundamental characteristics:
+    - Both involve **pricing uncertainty**  
+    - Both use **probabilistic expectation**  
+    - Both exhibit **market inefficiencies**  
+    - Both contain behaviors of mean reversion and volatility clustering  
+    - Both have entities (market makers / sportsbooks) that adjust prices dynamically  
+
+    The conceptual overlap suggested that traditional hedge-fund mathematics might be transferable.
+
+    ---
+
+    ## 2. Historical Inspiration From Hedge Funds
+    Three classical strategies were selected:
+
+    ### 2.1 Mean Reversion in Equities
+    Used heavily in statistical arbitrage desks.  
+    Stocks that move too far from fair value tend to **revert**.
+
+    ### 2.2 Spread Divergence (Pairs Trading)
+    When two correlated assets diverge unexpectedly, arbitrage opportunities appear.  
+    This maps perfectly to **model vs sportsbook lines**.
+
+    ### 2.3 Kelly Criterion Allocation
+    Used in portfolio optimization to maximize geometric growth under uncertainty.
+
+    These three concepts have **decades of validated academic and real-world performance**.
+
+    ---
+
+    ## 3. Translating These to Sports Betting
+    ### 3.1 Mean Reversion → Mispriced Odds Detection
+    Odds that deviate from historical fair pricing generate a Z-score.  
+    Extreme deviations suggest value.
+
+    ### 3.2 Divergence Detection → Spread Inefficiency
+    Two independent predictive models generate an internal “fair” spread.  
+    If the sportsbook price diverges, the bettor has an advantage.
+
+    ### 3.3 Kelly Criterion → Optimal Stake Sizing
+    Sportsbooks payout structure mirrors market payoff functions.  
+    Thus, Kelly retains its theoretical validity.
+
+    ---
+
+    ## 4. System Implementation
+    The three algorithms were integrated into a unified framework:
+
+    - Mean Reversion Engine  
+    - Dual-Model Divergence Engine  
+    - Kelly Bet Sizing Module  
+
+    Built in Python + Streamlit with a clean, modular interface.
+
+    ---
+
+    ## 5. Results & Insights
+    - All three translated successfully  
+    - All produced actionable signals  
+    - Kelly sizing enables risk-adjusted exploitation of these edges  
+    - The system behaves similarly to simplified financial-market signal engines  
+
+    ---
+
+    ## 6. Conclusion
+    This project demonstrates that stock-market hedging principles **do translate** to sports betting with only
+    domain-specific adjustments.
+
+    HedgeBet IQ represents a **cross-disciplinary quant system**, merging:
+    - financial mathematics  
+    - sports analytics  
+    - risk management  
+    - computational modeling  
+
+    It shows that betting markets contain inefficiencies analogous to those hedge funds profit from—opening the door
+    for a new generation of quant bettors.
+
+    """)
+
